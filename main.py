@@ -3,7 +3,7 @@ import re
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
 # from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.embeddings import HuggingFaceHubEmbeddings
+from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_community.vectorstores import Qdrant
 from langchain.chains import RetrievalQA
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -43,7 +43,7 @@ os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.environ.get("HUGGINGFACE_API_KEY", "
 
 # Thay OpenAIEmbeddings bằng HuggingFaceEmbeddings (miễn phí, chạy cục bộ)
 # embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-embeddings = HuggingFaceHubEmbeddings(
+embeddings = HuggingFaceEndpointEmbeddings(
     model="sentence-transformers/all-MiniLM-L6-v2"
 )
 
@@ -53,8 +53,8 @@ embeddings = HuggingFaceHubEmbeddings(
 #     port=6333
 # )
 qdrant_client = QdrantClient(
-    url="https://46cfbe6c-39e3-4932-9c35-f785698fbdd3.us-west-2-0.aws.cloud.qdrant.io",
-    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0._vpwH9FFClLO1JH-Cp4RwD7anj769IL4rM58VmPXVj0",
+    url="https://dc96dab8-32db-4f33-b9b3-54cf09c2baaf.europe-west3-0.gcp.cloud.qdrant.io",
+    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.v3cRC-Cn8bZRQKUFnF5MoY-kfp2zCdHRC7TbOYl5WOo",
 )
 
 collection_name = "chatbot_documents"
@@ -248,7 +248,7 @@ async def chat_with_bot(request: ChatRequest):
     # )
 
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",
+        model="gemini-2.0-flash",
         google_api_key=os.environ.get("GOOGLE_API_KEY", ""),
         temperature=0
     )
