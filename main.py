@@ -5,7 +5,9 @@ from fastapi.responses import JSONResponse
 # from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_huggingface import HuggingFaceEndpointEmbeddings
 from langchain_community.vectorstores import Qdrant
-from langchain.chains import RetrievalQA
+from langchain.chains import retrieval_qa
+from langchain.chains.retrieval_qa.base import RetrievalQA
+from langchain.prompts import PromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from qdrant_client import QdrantClient
@@ -14,7 +16,8 @@ import docx
 import tempfile
 import shutil
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_qdrant import Qdrant
+# from langchain_qdrant import Qdrant
+from langchain_community.vectorstores import Qdrant as QdrantVectorStore
 from datetime import datetime
 from typing import List, Dict
 from pydantic import BaseModel
@@ -27,6 +30,14 @@ load_dotenv()
 
 # Khởi tạo FastAPI app
 app = FastAPI(title="Character AI Chatbot API")
+
+SYSTEM_PROMPT = PromptTemplate(
+    input_variables=["context", "question"],   # bắt buộc phải match input của chain
+    template="""Bạn là trợ lý đám cưới của Lê Thành và Minh Khuê.
+            Hãy sử dụng thông tin trong {context} để trả lời câu hỏi bên dưới.
+            Câu hỏi: {question}
+            """
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -53,8 +64,8 @@ embeddings = HuggingFaceEndpointEmbeddings(
 #     port=6333
 # )
 qdrant_client = QdrantClient(
-    url="https://dc96dab8-32db-4f33-b9b3-54cf09c2baaf.europe-west3-0.gcp.cloud.qdrant.io",
-    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.v3cRC-Cn8bZRQKUFnF5MoY-kfp2zCdHRC7TbOYl5WOo",
+    url="https://e8c2aa1c-10ba-423b-bbcb-dd7624dcfa65.us-east4-0.gcp.cloud.qdrant.io",
+    api_key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhY2Nlc3MiOiJtIn0.9uk-9DXlIu_9PaqpM6iaWNBmFIzaVgHRztVnQngbiKk",
 )
 
 collection_name = "chatbot_documents"
@@ -196,7 +207,7 @@ async def upload_file(file: UploadFile = File(...)):
             )
             
             # Tạo vector store sử dụng qdrant_client đã cấu hình
-            vector_store = Qdrant(
+            vector_store = QdrantVectorStore(
                 client=qdrant_client,
                 collection_name=current_collection,
                 embeddings=embeddings
@@ -230,33 +241,30 @@ async def chat_with_bot(request: ChatRequest):
         # Đọc collection_name
         with open("current_collection.txt", "r", encoding="utf-8") as f:
             current_collection = f.read().strip()
-    except:
+    except (FileNotFoundError, OSError):
         raise HTTPException(status_code=400, detail="Vui lòng tải file lên trước!")
     
-    vector_store = Qdrant(
+    vector_store = QdrantVectorStore(
         client=qdrant_client,
         collection_name=current_collection,
         embeddings=embeddings
     )
     
-    # Cấu hình ChatOpenAI để dùng OpenRouter
-    # llm = ChatOpenAI(
-    #     openai_api_key=openrouter_api_key,
-    #     openai_api_base="https://openrouter.ai/api/v1",
-    #     model_name="nvidia/llama-3.1-nemotron-70b-instruct:free",
-    #     temperature=0
-    # )
+    google_api_key = os.environ.get("GOOGLE_API_KEY")
+    if not google_api_key:
+        raise HTTPException(status_code=500, detail="GOOGLE_API_KEY is missing")
 
     llm = ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
-        google_api_key=os.environ.get("GOOGLE_API_KEY", ""),
-        temperature=0
+        google_api_key=google_api_key,
+        temperature=0.5
     )
     
     qa_chain = RetrievalQA.from_chain_type(
         llm=llm,
         chain_type="stuff",
-        retriever=vector_store.as_retriever(search_kwargs={"k": 3})
+        retriever=vector_store.as_retriever(search_kwargs={"k": 3}),
+        chain_type_kwargs={"prompt": SYSTEM_PROMPT}
     )
     
     # Lưu câu hỏi vào history
@@ -269,7 +277,7 @@ async def chat_with_bot(request: ChatRequest):
     # Lấy toàn bộ history
     history = get_history(session_id)
     
-    return ChatResponse(history=history, message=session_id)
+    return ChatResponse(history=history, message=response_text)
 
 # Chạy ứng dụng
 if __name__ == "__main__":
